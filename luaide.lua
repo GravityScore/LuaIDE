@@ -1424,7 +1424,8 @@ local standardsCompletions = {
 	"for%s+.+%s+do%s*$",
 	"while%s+.+%s+do%s*$",
 	"repeat%s*$",
-	"function%s+[a-zA-Z_0-9]\(.*\)%s*$",
+	"function%s+[a-zA-Z_0-9]?\(.*\)%s*$",
+	"=%s*function%s*\(.*\)%s*$",
 	"else%s*$",
 	"elseif%s+.+%s+then%s*$"
 }
