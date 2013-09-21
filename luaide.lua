@@ -1,4 +1,3 @@
-
 --  
 --  Lua IDE
 --  Made by GravityScore
@@ -1686,7 +1685,7 @@ local function edit(path)
 				-- Enter
 				local f = nil
 				for _, v in pairs(standardsCompletions) do
-					if lines[y]:find(v) then f = v end
+					if lines[y]:find(v) and x == #lines[y] + 1 then f = v end
 				end
 
 				local _, spaces = lines[y]:find("^[ ]+")
