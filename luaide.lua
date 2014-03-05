@@ -1,4 +1,3 @@
-
 --  
 --  Lua IDE
 --  Made by GravityScore
@@ -921,7 +920,7 @@ local function run(path, lines, useArgs)
 	end
 
 	-- To prevent key from showing up in editor
-	os.queueEvent(event_distract)
+	os.queueEvent("event_distract")
 	os.pullEvent()
 
 	if err then
@@ -977,7 +976,7 @@ local function run(path, lines, useArgs)
 				viewErrorHelp(formattedErr)
 			elseif opt == "Go To Line" then
 				-- To prevent key from showing up in editor
-				os.queueEvent(event_distract)
+				os.queueEvent("event_distract")
 				os.pullEvent()
 
 				return "go to", tonumber(formattedErr.line)
@@ -2211,7 +2210,7 @@ if err and not err:find("Terminated") then
 	end
 
 	-- Prevent key from being shown
-	os.queueEvent(event_distract)
+	os.queueEvent("event_distract")
 	os.pullEvent()
 end
 
