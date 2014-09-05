@@ -9,21 +9,22 @@
 
 --    Variables
 
-local version = "1.1"
 local arguments = {...}
 
+local version = "1.1"
+local tabWidth = 2
+local autosaveInterval = 20
+local keyboardShortcutTimeout = 0.4
+local updateURL = "https://raw.github.com/GravityScore/LuaIDE/master/luaide.lua"
+local themeLocation = "/.luaide_theme"
 
 local w, h = term.getSize()
-local tabWidth = 2
+local ideLocation = "/" .. shell.getRunningProgram()
 
-
-local autosaveInterval = 20
 local allowEditorEvent = true
-local keyboardShortcutTimeout = 0.4
-
-
 local clipboard = nil
-
+local languages = {}
+local currentLanguage = {}
 
 local theme = {
 	background = colors.gray,
@@ -43,20 +44,9 @@ local theme = {
 	readOnly = colors.red,
 }
 
-
-local languages = {}
-local currentLanguage = {}
-
-
-local updateURL = "https://raw.github.com/GravityScore/LuaIDE/master/computercraft/ide.lua"
-local ideLocation = "/" .. shell.getRunningProgram()
-local themeLocation = "/.luaide_theme"
-
 local function isAdvanced()
 	return term.isColor and term.isColor()
 end
-
-
 
 
 --  -------- Utilities
@@ -372,7 +362,7 @@ local function prompt(list, dir, isGrid)
 	draw(sel)
 
 	while true do
-		local e, but, x, y = os.pullEvent()
+		local e, but, x, y = os.pullEventRaw()
 		if e == "key" and but == 28 then
 			return list[sel][1]
 		elseif e == "key" and but == key1 and sel > 1 then
@@ -393,6 +383,8 @@ local function prompt(list, dir, isGrid)
 					return list[i][1]
 				end
 			end
+		elseif e == "terminate" then
+			return "exit"
 		end
 	end
 end
@@ -639,6 +631,7 @@ languages.lua.keywords = {
 	["rawget"] = "function",
 	["setfenv"] = "function",
 	["getfenv"] = "function",
+	["error"] = "function",
 }
 
 languages.lua.parseError = function(e)
@@ -1708,6 +1701,15 @@ local function edit(path)
 					if lines[y]:find(v) and x == #lines[y] + 1 then f = v end
 				end
 
+				local skip = true
+				for i = x, string.len(lines[y]) do
+					local match = false
+					for _, v in pairs(liveCompletions) do
+						if lines[y]:sub(i, i) == v then match = true break end
+					end
+					if match == false then skip = false break end
+				end
+				
 				local _, spaces = lines[y]:find("^[ ]+")
 				if not spaces then spaces = 0 end
 				if f then
@@ -1721,10 +1723,14 @@ local function edit(path)
 					cursorLoc(x, y, true)
 				else
 					local oldLine = lines[y]
-
-					lines[y] = lines[y]:sub(1, x - 1)
-					table.insert(lines, y + 1, string.rep(" ", spaces) .. oldLine:sub(x, -1))
-
+					
+					if skip then
+						table.insert(lines, y + 1, string.rep(" ", spaces))
+					else
+						lines[y] = lines[y]:sub(1, x - 1)
+						table.insert(lines, y + 1, string.rep(" ", spaces) .. oldLine:sub(x, -1))
+					end
+					
 					x, y = spaces + 1, y + 1
 					cursorLoc(x, y, true)
 				end
@@ -1733,7 +1739,14 @@ local function edit(path)
 				if x > 1 then
 					local f = false
 					for k, v in pairs(liveCompletions) do
-						if lines[y]:sub(x - 1, x - 1) == k then f = true end
+						if
+							lines[y]:sub(x - 1, x - 1) == k and
+							lines[y]:sub(x, x) == v	and
+							lines[y]:sub(x - 2, x - 2) ~= "\\"
+						then
+							f = true
+							break
+						end
 					end
 
 					lines[y] = lines[y]:sub(1, x - 2) .. lines[y]:sub(x + (f and 1 or 0), -1)
@@ -1796,7 +1809,7 @@ local function edit(path)
 				y + scrolly - 1 == liveErr.line) then
 			local shouldIgnore = false
 			for k, v in pairs(liveCompletions) do
-				if key == v and lines[y]:find(k, 1, true) and lines[y]:sub(x, x) == v then
+				if key == v and lines[y]:find(k, 1, true) and lines[y]:sub(x, x) == v and lines[y]:sub(x - 1, x - 1) ~= "\\" then
 					shouldIgnore = true
 				end
 			end
@@ -1804,7 +1817,10 @@ local function edit(path)
 			local addOne = false
 			if not shouldIgnore then
 				for k, v in pairs(liveCompletions) do
-					if key == k and lines[y]:sub(x, x) ~= k then key = key .. v addOne = true end
+					if key == k and lines[y]:sub(x, x) ~= k and lines[y]:sub(x - 1, x - 1) ~= "\\" then
+						key = key .. v
+						addOne = true
+					end
 				end
 				lines[y] = lines[y]:sub(1, x - 1) .. key .. lines[y]:sub(x, -1)
 			end
@@ -2111,7 +2127,7 @@ end
 local function settings()
 	title("LuaIDE - Settings")
 
-	local opt = prompt({{"Change Theme", w/2 - 17, 8}, {"Return to Menu", w/2 - 22, 13},
+	local opt = prompt({{"Change Theme", w/2 - 17, 8}, {"Return to Menu", w/2 - 19, 13},
 		{"Check for Updates", w/2 + 2, 8}, {"Exit IDE", w/2 + 2, 13, bg = colors[theme.err], 
 		highlight = colors[theme.errHighlight]}}, "vertical", true)
 	if opt == "Change Theme" then return changeTheme()
