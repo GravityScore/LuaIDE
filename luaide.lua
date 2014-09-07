@@ -620,6 +620,8 @@ languages.lua.keywords = {
 	["nil"] = "constant",
 
 	["print"] = "function",
+	["printError"] = "function"
+	["error"] = "function"
 	["write"] = "function",
 	["sleep"] = "function",
 	["pairs"] = "function",
