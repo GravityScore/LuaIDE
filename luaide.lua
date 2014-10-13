@@ -11,11 +11,14 @@
 
 local arguments = {...}
 
-local version = "1.1"
+local version = "1.2"
+
+local doCursorWrap = true
 local tabWidth = 2
 local autosaveInterval = 20
 local keyboardShortcutTimeout = 0.4
-local updateURL = "https://raw.github.com/GravityScore/LuaIDE/master/luaide.lua"
+-- local updateURL = "https://raw.github.com/GravityScore/LuaIDE/master/luaide.lua"
+local updateURL = "https://raw.github.com/DeGariless/LuaIDE/master/luaide.lua"
 local themeLocation = "/.luaide_theme"
 
 local w, h = term.getSize()
@@ -1478,9 +1481,9 @@ local function writeHighlighted(line)
 		while line:len() > 0 do	
 			line = attemptToHighlight(line, "^%-%-%[%[.-%]%]", colors[theme.comment]) or
 				attemptToHighlight(line, "^%-%-.*", colors[theme.comment]) or
-				attemptToHighlight(line, "^\".*[^\\]\"", colors[theme.string]) or
-				attemptToHighlight(line, "^\'.*[^\\]\'", colors[theme.string]) or
-				attemptToHighlight(line, "^%[%[.-%]%]", colors[theme.string]) or
+				attemptToHighlight(line, "^\".-[^\\]\"", colors[theme.string]) or
+				attemptToHighlight(line, "^\'.-[^\\]\'", colors[theme.string]) or
+				attemptToHighlight(line, "^%[%[.-[^\\]%]%]", colors[theme.string]) or
 				attemptToHighlight(line, "^[%w_]+", function(match)
 					if currentLanguage.keywords[match] then
 						return colors[theme[currentLanguage.keywords[match]]]
@@ -1683,18 +1686,32 @@ local function edit(path)
 				x, y = math.min(x, lines[y + 1]:len() + 1), y + 1
 				drawLine(y, y - 1)
 				cursorLoc(x, y)
-			elseif key == 203 and x > 1 then
-				-- Left
-				x = x - 1
-				local force = false
-				if y - scrolly + offy < offy + 1 then force = true end
-				cursorLoc(x, y, force)
-			elseif key == 205 and x < lines[y]:len() + 1 then
+			elseif key == 203 then
+                -- Left
+                if x > 1 then
+                    local force = false
+                    x = x - 1
+                    if y - scrolly + offy < offy + 1 then force = true end
+                    cursorLoc(x, y, force)
+                elseif doCursorWrap and y ~= 1 then
+                    y = y - 1
+                    x = #lines[y] + 1
+                    drawLine(y, y + 1)
+                    cursorLoc(x, y)
+                end
+			elseif key == 205 then
 				-- Right
-				x = x + 1
-				local force = false
-				if y - scrolly + offy < offy + 1 then force = true end
-				cursorLoc(x, y, force)
+                if x < lines[y]:len() + 1 then
+                    local force = false
+                    x = x + 1
+                    if y - scrolly + offy < offy + 1 then force = true end
+                    cursorLoc(x, y, force)
+                elseif doCursorWrap and y ~= #lines then
+                    x = 1
+                    y = y + 1
+                    drawLine(y, y - 1)
+                    cursorLoc(x, y)
+                end
 			elseif (key == 28 or key == 156) and (displayCode and true or y + scrolly - 1 ==
 					liveErr.line) then
 				-- Enter
