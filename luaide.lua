@@ -9,21 +9,25 @@
 
 --    Variables
 
-local version = "1.1"
 local arguments = {...}
 
+local version = "1.3"
+
+local doCursorWrap = true
+local tabWidth = 2
+local autosaveInterval = 20
+local keyboardShortcutTimeout = 0.4
+-- local updateURL = "https://raw.github.com/GravityScore/LuaIDE/master/luaide.lua"
+local updateURL = "https://raw.github.com/DeGariless/LuaIDE/master/luaide.lua"
+local themeLocation = "/.luaide_theme"
 
 local w, h = term.getSize()
-local tabWidth = 2
+local ideLocation = "/" .. shell.getRunningProgram()
 
-
-local autosaveInterval = 20
 local allowEditorEvent = true
-local keyboardShortcutTimeout = 0.4
-
-
 local clipboard = nil
-
+local languages = {}
+local currentLanguage = {}
 
 local theme = {
 	background = colors.gray,
@@ -43,20 +47,9 @@ local theme = {
 	readOnly = colors.red,
 }
 
-
-local languages = {}
-local currentLanguage = {}
-
-
-local updateURL = "https://raw.github.com/GravityScore/LuaIDE/master/computercraft/ide.lua"
-local ideLocation = "/" .. shell.getRunningProgram()
-local themeLocation = "/.luaide_theme"
-
 local function isAdvanced()
 	return term.isColor and term.isColor()
 end
-
-
 
 
 --  -------- Utilities
@@ -290,7 +283,7 @@ else theme = normalTheme end
 
 --  -------- Drawing
 
-local function centerPrint(text, ny)
+local function centerPrint(text, ny) --TODO fix this function to work with any size screen
 	if type(text) == "table" then for _, v in pairs(text) do centerPrint(v) end
 	else
 		local x, y = term.getCursorPos()
@@ -346,7 +339,119 @@ end
 
 --  -------- Prompt
 
-local function prompt(list, dir, isGrid)
+local function promptMenu(itemList)
+    local sel = 0
+    local menuScroll = 1
+    maxItems = math.floor((h - 5)/3) -- Calculate how many items can fit on the screen
+    if not isAdvanced() then
+        sel = 1 -- highlight 1st choice if computer is not touch screen
+    end
+    
+    local function draw()
+    	term.setTextColor(colors[theme.textColor])
+        for i = menuScroll, math.min(menuScroll + maxItems - 1, #itemList) do -- draw menu Items
+            if i == sel then
+                term.setBackgroundColor(colors[theme.promptHighlight])
+			else
+                term.setBackgroundColor(colors[theme.prompt])
+            end
+			term.setCursorPos(1, 6 + (i - menuScroll) * 3)
+            term.clearLine()
+            term.setCursorPos(1, 7 + (i - menuScroll) * 3)
+            term.clearLine()
+            if i == sel then
+                term.write(" > ")
+            else
+                term.write(" - ")
+            end
+            term.write(itemList[i])
+            term.setCursorPos(1, 8 + (i - menuScroll) * 3)
+            term.clearLine()
+        end
+        
+        if #itemList > maxItems then -- draw scroll buttons 
+            term.setTextColor(colors[theme.background])
+            if menuScroll > 1 then
+                term.setCursorPos(w-1,7)
+                if sel == menuScroll then
+                    term.setBackgroundColor(colors[theme.promptHighlight])
+                else
+                    term.setBackgroundColor(colors[theme.prompt])
+          	    end
+         	    term.write("^")
+            end
+            if menuScroll ~= #itemList - maxItems + 1 then
+                term.setCursorPos(w-1,maxItems * 3 + 4)
+                if sel == menuScroll + maxItems - 1 then
+                    term.setBackgroundColor(colors[theme.promptHighlight])
+                else
+                    term.setBackgroundColor(colors[theme.prompt])
+                end
+                term.write("V")
+            end
+        term.setTextColor(colors[theme.textColor])
+        end
+    end -- end of draw() function
+    
+    if h < 12 then
+        error("screen is not tall enough for these menus") --TODO make menu work for smaller screens (turtles)
+    else
+        draw()
+        sleep(.5)
+        while true do
+            local event,but,x,y = os.pullEventRaw()
+            if event == "mouse_scroll" then -- mouse scroll
+                menuScroll = math.max(math.min(menuScroll + but, #itemList - maxItems + 1),1)
+                draw()    
+            elseif event == "key" then
+                if but == 208 or but == 205 then -- down or right arrow key
+                    if sel < menuScroll or sel > menuScroll + maxItems then
+                        sel = menuScroll
+                    else
+                        sel = math.min(sel + 1, #itemList)
+                        if sel == menuScroll + maxItems then
+                            menuScroll = menuScroll + 1
+                        end
+                    end
+                    draw()
+                elseif but == 200 or but == 203 then -- up or left arrow key
+                    if sel < menuScroll or sel > menuScroll + maxItems then
+                        sel = menuScroll + maxItems - 1
+                    else
+                        sel = math.max(sel - 1, 1)
+                        if sel < menuScroll then
+                            menuScroll = menuScroll - 1
+                        end
+                    end
+                    draw()
+                elseif but == 28 and sel ~= 0 then --enter
+                    break
+                end
+            elseif event == "mouse_click" and but == 1 then
+                if y > 6 and y < maxItems * 3 + 6 and x < w - 3 then
+                    sel = math.ceil((y - 5)/3) + menuScroll - 1
+                    draw()
+                    sleep(0.07)
+                    break
+                elseif x == w - 1 and y == 7 then -- scroll up button
+                    menuScroll = math.max(math.min(menuScroll - 1, #itemList - maxItems + 1),1)
+                    draw()
+                elseif x == w - 1 and y == maxItems * 3 + 4 then -- scroll down button
+                    menuScroll = math.max(math.min(menuScroll + 1, #itemList - maxItems + 1),1)
+                    draw()
+                end
+            elseif e == "terminate" then
+                return "exit"
+            end
+        end
+        return itemList[sel]
+    end
+end
+
+
+
+
+local function prompt(list, dir, isGrid) -- MARKER this is function is currently not used
 	local function draw(sel)
 		for i, v in ipairs(list) do
 			if i == sel then term.setBackgroundColor(v.highlight or colors[theme.promptHighlight])
@@ -372,7 +477,7 @@ local function prompt(list, dir, isGrid)
 	draw(sel)
 
 	while true do
-		local e, but, x, y = os.pullEvent()
+		local e, but, x, y = os.pullEventRaw()
 		if e == "key" and but == 28 then
 			return list[sel][1]
 		elseif e == "key" and but == key1 and sel > 1 then
@@ -393,11 +498,15 @@ local function prompt(list, dir, isGrid)
 					return list[i][1]
 				end
 			end
+		elseif e == "terminate" then
+			return "exit"
 		end
 	end
 end
 
-local function scrollingPrompt(list)
+
+
+local function scrollingPrompt(list) -- MARKER this is function is currently not used
 	local function draw(items, sel, loc)
 		for i, v in ipairs(items) do
 			local bg = colors[theme.prompt]
@@ -628,6 +737,8 @@ languages.lua.keywords = {
 	["nil"] = "constant",
 
 	["print"] = "function",
+	["printError"] = "function",
+	["error"] = "function",
 	["write"] = "function",
 	["sleep"] = "function",
 	["pairs"] = "function",
@@ -639,6 +750,7 @@ languages.lua.keywords = {
 	["rawget"] = "function",
 	["setfenv"] = "function",
 	["getfenv"] = "function",
+	["error"] = "function",
 }
 
 languages.lua.parseError = function(e)
@@ -1478,14 +1590,14 @@ local function attemptToHighlight(line, regex, col)
 	return nil
 end
 
-local function writeHighlighted(line)
+local function writeHighlighted(line) -- TODO understand this code and make multi-line comments work
 	if currentLanguage == languages.lua then
 		while line:len() > 0 do	
 			line = attemptToHighlight(line, "^%-%-%[%[.-%]%]", colors[theme.comment]) or
 				attemptToHighlight(line, "^%-%-.*", colors[theme.comment]) or
-				attemptToHighlight(line, "^\".*[^\\]\"", colors[theme.string]) or
-				attemptToHighlight(line, "^\'.*[^\\]\'", colors[theme.string]) or
-				attemptToHighlight(line, "^%[%[.-%]%]", colors[theme.string]) or
+				attemptToHighlight(line, "^\".-[^\\]\"", colors[theme.string]) or
+				attemptToHighlight(line, "^\'.-[^\\]\'", colors[theme.string]) or
+				attemptToHighlight(line, "^%[%[.-[^\\]%]%]", colors[theme.string]) or
 				attemptToHighlight(line, "^[%w_]+", function(match)
 					if currentLanguage.keywords[match] then
 						return colors[theme[currentLanguage.keywords[match]]]
@@ -1494,7 +1606,9 @@ local function writeHighlighted(line)
 				end) or
 				attemptToHighlight(line, "^[^%w_]", colors[theme.textColor])
 		end
-	else term.write(line) end
+	else
+        term.write(line)
+    end
 end
 
 local function draw()
@@ -1688,18 +1802,32 @@ local function edit(path)
 				x, y = math.min(x, lines[y + 1]:len() + 1), y + 1
 				drawLine(y, y - 1)
 				cursorLoc(x, y)
-			elseif key == 203 and x > 1 then
-				-- Left
-				x = x - 1
-				local force = false
-				if y - scrolly + offy < offy + 1 then force = true end
-				cursorLoc(x, y, force)
-			elseif key == 205 and x < lines[y]:len() + 1 then
+			elseif key == 203 then
+                -- Left
+                if x > 1 then
+                    local force = false
+                    x = x - 1
+                    if y - scrolly + offy < offy + 1 then force = true end
+                    cursorLoc(x, y, force)
+                elseif doCursorWrap and y ~= 1 then
+                    y = y - 1
+                    x = #lines[y] + 1
+                    drawLine(y, y + 1)
+                    cursorLoc(x, y)
+                end
+			elseif key == 205 then
 				-- Right
-				x = x + 1
-				local force = false
-				if y - scrolly + offy < offy + 1 then force = true end
-				cursorLoc(x, y, force)
+                if x < lines[y]:len() + 1 then
+                    local force = false
+                    x = x + 1
+                    if y - scrolly + offy < offy + 1 then force = true end
+                    cursorLoc(x, y, force)
+                elseif doCursorWrap and y ~= #lines then
+                    x = 1
+                    y = y + 1
+                    drawLine(y, y - 1)
+                    cursorLoc(x, y)
+                end
 			elseif (key == 28 or key == 156) and (displayCode and true or y + scrolly - 1 ==
 					liveErr.line) then
 				-- Enter
@@ -1708,6 +1836,19 @@ local function edit(path)
 					if lines[y]:find(v) and x == #lines[y] + 1 then f = v end
 				end
 
+				local skip = false
+                if lines[y]:sub(x, string.len(lines[y])) ~= "]]" then
+                    skip = true
+                    for i = x, string.len(lines[y]) do
+                        local match = false
+                        for _, v in pairs(liveCompletions) do
+                            if lines[y]:sub(i, i) == v then match = true break end
+                        end
+                        if match == false then skip = false break end
+                    end
+                
+                end
+				
 				local _, spaces = lines[y]:find("^[ ]+")
 				if not spaces then spaces = 0 end
 				if f then
@@ -1721,10 +1862,14 @@ local function edit(path)
 					cursorLoc(x, y, true)
 				else
 					local oldLine = lines[y]
-
-					lines[y] = lines[y]:sub(1, x - 1)
-					table.insert(lines, y + 1, string.rep(" ", spaces) .. oldLine:sub(x, -1))
-
+					
+					if skip then
+						table.insert(lines, y + 1, string.rep(" ", spaces))
+					else
+						lines[y] = lines[y]:sub(1, x - 1)
+						table.insert(lines, y + 1, string.rep(" ", spaces) .. oldLine:sub(x, -1))
+					end
+					
 					x, y = spaces + 1, y + 1
 					cursorLoc(x, y, true)
 				end
@@ -1733,7 +1878,14 @@ local function edit(path)
 				if x > 1 then
 					local f = false
 					for k, v in pairs(liveCompletions) do
-						if lines[y]:sub(x - 1, x - 1) == k then f = true end
+						if
+							lines[y]:sub(x - 1, x - 1) == k and
+							lines[y]:sub(x, x) == v	and
+							lines[y]:sub(x - 2, x - 2) ~= "\\"
+						then
+							f = true
+							break
+						end
 					end
 
 					lines[y] = lines[y]:sub(1, x - 2) .. lines[y]:sub(x + (f and 1 or 0), -1)
@@ -1796,7 +1948,7 @@ local function edit(path)
 				y + scrolly - 1 == liveErr.line) then
 			local shouldIgnore = false
 			for k, v in pairs(liveCompletions) do
-				if key == v and lines[y]:find(k, 1, true) and lines[y]:sub(x, x) == v then
+				if key == v and lines[y]:find(k, 1, true) and lines[y]:sub(x, x) == v and lines[y]:sub(x - 1, x - 1) ~= "\\" then
 					shouldIgnore = true
 				end
 			end
@@ -1804,7 +1956,10 @@ local function edit(path)
 			local addOne = false
 			if not shouldIgnore then
 				for k, v in pairs(liveCompletions) do
-					if key == k and lines[y]:sub(x, x) ~= k then key = key .. v addOne = true end
+					if key == k and lines[y]:sub(x, x) ~= k and lines[y]:sub(x - 1, x - 1) ~= "\\" then
+						key = key .. v
+						addOne = true
+					end
 				end
 				lines[y] = lines[y]:sub(1, x - 1) .. key .. lines[y]:sub(x, -1)
 			end
@@ -1983,7 +2138,7 @@ end
 
 --  -------- Settings
 
-local function update()
+local function update() -- TODO disable update when LuaIDE is in rom/programs
 	local function draw(status)
 		title("LuaIDE - Update")
 		term.setBackgroundColor(colors[theme.prompt])
@@ -2060,7 +2215,7 @@ local function changeTheme()
 	if isAdvanced() then
 		local disThemes = {"Back"}
 		for _, v in pairs(availableThemes) do table.insert(disThemes, v[1]) end
-		local t = scrollingPrompt(disThemes)
+		local t = promptMenu(disThemes)
 		local url = nil
 		for _, v in pairs(availableThemes) do if v[1] == t then url = v[2] end end
 
@@ -2094,7 +2249,7 @@ local function changeTheme()
 			fs.move("/.LuaIDE_temp_theme_file", themeLocation)
 			theme = a
 			sleep(1.6)
-			return "menu"
+			return "settings"
 		end
 		
 		term.write("LuaIDE - Could Not Load Theme!")
@@ -2102,18 +2257,26 @@ local function changeTheme()
 		sleep(1.6)
 		return "settings"
 	else
-		term.setCursorPos(1, 8)
-		centerPrint("Themes are not available on")
-		centerPrint("normal computers!")
+		term.setCursorPos(1, h / 2 - 1)
+        if w < 27 then --Fixes message on smaller screens
+            centerPrint("Themes are only")
+            centerPrint("available on")
+            centerPrint("advanced computers")
+        else
+            centerPrint("Themes are only available")
+            centerPrint("on advanced computers")
+        end
+        os.startTimer(5)
+        sleep(0.1)
+        os.pullEvent()
+        return "settings" 
 	end
 end
 
 local function settings()
 	title("LuaIDE - Settings")
 
-	local opt = prompt({{"Change Theme", w/2 - 17, 8}, {"Return to Menu", w/2 - 22, 13},
-		{"Check for Updates", w/2 + 2, 8}, {"Exit IDE", w/2 + 2, 13, bg = colors[theme.err], 
-		highlight = colors[theme.errHighlight]}}, "vertical", true)
+	local opt = promptMenu({"Change Theme","Check for Updates","Return to Menu", "Exit IDE"})
 	if opt == "Change Theme" then return changeTheme()
 	elseif opt == "Check for Updates" then return update()
 	elseif opt == "Return to Menu" then return "menu"
@@ -2126,9 +2289,7 @@ end
 local function menu()
 	title("Welcome to LuaIDE " .. version)
 
-	local opt = prompt({{"New File", w/2 - 13, 8}, {"Open File", w/2 - 14, 13},
-		{"Settings", w/2 + 2, 8}, {"Exit IDE", w/2 + 2, 13, bg = colors[theme.err],
-		highlight = colors[theme.errHighlight]}}, "vertical", true)
+	local opt = promptMenu({"New File","Open File","Settings","Exit IDE"})
 	if opt == "New File" then return "new"
 	elseif opt == "Open File" then return "open"
 	elseif opt == "Settings" then return "settings"
@@ -2207,7 +2368,7 @@ if err and not err:find("Terminated") then
 	else centerPrint("Press Any Key to Exit...", h - 1) end
 	while true do
 		local e = os.pullEvent()
-		if e == "mouse_click" or (not isAdvanced() and e == "key") then break end
+		if e == "mouse_click" or e == "key" then break end
 	end
 
 	-- Prevent key from being shown
@@ -2220,5 +2381,11 @@ term.setBackgroundColor(colors.black)
 term.setTextColor(colors.white)
 term.clear()
 term.setCursorPos(1, 1)
-centerPrint("Thank You for Using Lua IDE " .. version)
-centerPrint("Made by GravityScore")
+if w < 27 then --Fixes message on smaller screens
+    centerPrint("Thank You for")
+    centerPrint("using Lua IDE " .. version)
+    centerPrint("Made by GravityScore")
+else
+    centerPrint("Thank You for using Lua IDE " .. version)
+    centerPrint("Made by GravityScore")
+end
